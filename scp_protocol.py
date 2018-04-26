@@ -4,7 +4,9 @@ import message
 import node
 import time
 import util
+from signal import signal, SIGPIPE, SIG_DFL
 
+signal(SIGPIPE,SIG_DFL)
 
 class ScpProtocol():
     
@@ -42,8 +44,7 @@ class ScpProtocol():
                     util.send('localhost', i, p)
             '''
             node.start_nomination()
-
-
+            time.sleep(0.1)
         '''
         for node in self.nodes:     # send test 'ping' messge to '5005'
             p = util.Packet(node.name, node.ip, 'ping')
@@ -62,10 +63,12 @@ class ScpProtocol():
         '''
 
 if __name__ == '__main__':
-    
     protocol = ScpProtocol()
     protocol.run()
     while True:
+        
         if input() == 'q':
+            for node in protocol.nodes:
+                print(node.consensus.nomination.X, node.consensus.nomination.Y, node.consensus.nomination.Z)
             print('\n' + "// SCP protocol terminated! //" + '\n')
             break

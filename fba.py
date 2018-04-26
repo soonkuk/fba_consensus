@@ -27,4 +27,4 @@ class FbaConsensus():
         pass
 
     def nomination_start(self):
-        self.nomination.start_federated_voting()
+        self.nomination.federated_voting()

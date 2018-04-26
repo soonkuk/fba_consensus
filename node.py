@@ -5,6 +5,9 @@ import pickle
 import threading
 import time
 import util
+from signal import signal, SIGPIPE, SIG_DFL
+
+signal(SIGPIPE,SIG_DFL)
 
 class Node():
     def __init__(self, name, quorum_conf, ip):
@@ -20,14 +23,11 @@ class Node():
         self.consensus = fba.FbaConsensus(self.name, self.quorum_conf, self.transactionPool, self.ip)
         self.consensus_phase = fba.ConsensusPhase.nomination 
         self.ping = util.Packet(self.name, self.ip, 'ping')
+        # print(self.name)
 
     def ping_test(self):
         for v in self.quorum_conf['validators'].keys():
             util.send('localhost', self.quorum_conf['validators'][v][0], self.ping)
-
-    def ping_answer(self, ip):
-        p2 = util.Packet(self.name, self.ip, 'received_ping')
-        util.send2('localhost', ip, p2)
 
     def packet_received(self, thread, sender_address, packet):
         if packet.type == 'ping':
@@ -57,17 +57,23 @@ class SocketReceiver(threading.Thread):
 
     def __init__(self, ip, parent=None):
         threading.Thread.__init__(self)
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR, 1)
-        self.sock.bind(('', ip))
         self.parent = parent
+        self.ip = ip
 
     def packet_received(self, thread, sender_address, packet):
         pass
 
     def run(self):
         while True:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR, 1)
+            self.sock.bind(('', self.ip))
             self.sock.listen(1)
-            self.conn, self.addr = self.sock.accept()
-            data = self.conn.recv(1024)
-            self.parent and self.parent.packet_received(self, self.addr, pickle.loads(data))
+            conn, addr = self.sock.accept()
+            data = conn.recv(65535)
+            time.sleep(0.2)
+            conn.send(bytes("received", 'UTF-8'))
+            self.parent and self.parent.packet_received(self, addr, pickle.loads(data))
+            conn.close()
+            time.sleep(0.2)
+            self.sock.close()
