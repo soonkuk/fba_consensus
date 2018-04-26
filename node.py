@@ -3,38 +3,40 @@ import json
 import socket
 import pickle
 import threading
+import time
+import util
 
 class Node():
-
-    def __init__(self, name, validators, ip):
+    def __init__(self, name, quorum_conf, ip):
         threading.Thread.__init__(self)
         self.name = name
-        self.quorumSet = {}
-        self.quorumSet.setdefault('threshold', 66)
-        self.quorumSet.setdefault('validators', {})
+        self.quorum_conf = quorum_conf
         self.ip = ip
         self.transactionPool = []
         self.messages = []
         self.receiver = SocketReceiver(self.ip, parent=self)
         self.receiver.daemon = True
         self.receiver.start()
-        for v in validators:
-            self.quorumSet['validators'][v] = 'no conn'
-        self.consensus = fba.FbaConsensus(self.name, self.quorumSet)
-        self.consensus_phase = fba.ConsensusPhase.nomination
+        self.consensus = fba.FbaConsensus(self.name, self.quorum_conf, self.transactionPool, self.ip)
+        self.consensus_phase = fba.ConsensusPhase.nomination 
+        self.ping = util.Packet(self.name, self.ip, 'ping')
 
-    def send(self, host, port, packet):
-        sender_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sender_sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR, 1)
-        sender_sock.connect((host, port))
-        sender_sock.send(pickle.dumps(packet))
+    def ping_test(self):
+        for v in self.quorum_conf['validators'].keys():
+            util.send('localhost', self.quorum_conf['validators'][v][0], self.ping)
+
+    def ping_answer(self, ip):
+        p2 = util.Packet(self.name, self.ip, 'received_ping')
+        util.send2('localhost', ip, p2)
 
     def packet_received(self, thread, sender_address, packet):
         if packet.type == 'ping':
-            self.quorumSet['validators'][packet.node] = 'connect'
-            # print('sender - ', packet.node, ' : ', self.name, '\'s validators network state : ', self.quorumSet['validators'])
-        elif packet.type == 'client':
-            self.transactionPool.append(packet)
+            self.quorum_conf['validators'][packet.node][1] = 'connect'
+            # self.ping_answer(packet.ip)
+        elif packet.type == 'received_ping':
+            self.quorum_conf['validators'][packet.node][1] = 'connect'
+        elif packet.type == 'client_message':
+            self.transactionPool.append(packet.data.message)
         else:
             self.handle_message(packet)
 
@@ -47,6 +49,9 @@ class Node():
             self.consensus.ballot_commit.handle(packet)
         else:
             print("Message type is not compatible with consensus phase")
+            
+    def start_nomination(self):
+        self.consensus.nomination_start()
 
 class SocketReceiver(threading.Thread):
 

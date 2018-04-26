@@ -1,3 +1,5 @@
+import pickle
+import socket
 import time
 import uuid
 
@@ -8,7 +10,19 @@ class Packet():
         self.type = message_type        # message type = 'ping' or scp message type(nomination, prepare, commit, client)
         self.data = message             # message = instance of Message()
 
-class Message():
-    def __init__(self, message):
-        self.id = uuid.uuid1().hex
-        self.message = message
+def send(host, port, packet):
+    sender_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sender_sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR, 1)
+    sender_sock.connect((host, port))
+    sender_sock.send(pickle.dumps(packet))
+
+def send2(host, port, packet):
+    sender_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sender_sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR, 1)
+    sender_sock.connect((host, port))
+    sender_sock.send(pickle.dumps(packet))
+
+def broadcast(quorum_conf, packet):
+    # receiver = list(filter(lambda x : x[1][1] == 'connect', quorum_conf['validators'].items()))
+    for _, v in quorum_conf['validators'].items():
+        send('localhost', v[0], packet)
