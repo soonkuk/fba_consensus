@@ -4,28 +4,36 @@ import util
 import message
 import copy
 import time
+import random
+import threading
 
 class nomination():
     def __init__(self, node_name, quorum_conf, slot_ix, slot_values, transaction_pool, ip):
-        self.X = []                      # set of values node v has voted to nominate
-        self.Y = []                      # set of values node v has accepted as nominated
-        self.Z = []                      # set of values that node v considers candidate values
+        self.X = set()                      # set of values node v has voted to nominate
+        self.Y = set()                      # set of values node v has accepted as nominated
+        self.Z = set()                      # set of values that node v considers candidate values
         self.N = {}                         # set of the latest NOMINATE message received from each node
         self.slot_values = slot_values
         self.slot_ix = slot_ix
         self.round = 0
+        self.nominate_flag = True
         self.node_name = node_name
         self.quorum_conf = quorum_conf
         self.ip = ip
         self.transaction_pool = transaction_pool
+        self.roundLeader_set = []
+
+    def change_round(self):
+        self.round += 1
+        self.nominate_flag = True
+        self.federated_voting()
 
     def handle(self, packet):
         # print(self.node_name, ' : ', packet.type, 'from ', packet.node)
-        time.sleep(0.2)
+        time.sleep(random.randrange(1, 3))
         self.federated_voting(packet.data)
 
     def round_leader_sel(self):
-        roundLeader_set = []
         neighbor_set = []
         hmax = 2**256
         topPriority = '0x00'
@@ -41,11 +49,11 @@ class nomination():
             h = self.hashFunction(v, 2)
             if eval(h) > eval(topPriority):
                 topPriority = h
-                roundLeader_set = []
+                self.roundLeader_set = []
             if eval(h) == eval(topPriority):
-                roundLeader_set.append(v)
+                self.roundLeader_set.append(v)
         # print('round', self.round, ' : ', self.node_name, 'selects round leader : ', roundLeader_set)
-        return roundLeader_set
+        return self.roundLeader_set
 
     def hashFunction(self, node_name, constant_value):
         prevSlotOutput = 0 if len(self.slot_values) == 0 else self.slot_values[-1]
@@ -54,20 +62,25 @@ class nomination():
 
     def federated_voting(self, msg=None):
         r_leader_set = self.round_leader_sel()
-        if msg == None:
-            
+        if msg == None:    
             if self.node_name in r_leader_set:
-                # print(self.node_name, r_leader_set)
-                nominate_value = self.transaction_pool.pop(0)
-                self.X.append(nominate_value)
-                m = message.NominationMessage(self.node_name, self.slot_ix, self.X, self.Y, self.quorum_conf)
-                self.N[self.node_name] = m
-                p = util.Packet(self.node_name, self.ip, 'nomination', m)
-                util.broadcast(self.quorum_conf, p)
+                if len(self.transaction_pool) != 0 and self.nominate_flag == True:
+                    nominate_value = self.transaction_pool.pop(0)
+                    self.nominate_flag = False
+                    self.X.add(nominate_value)
+                    m = message.NominationMessage(self.node_name, self.slot_ix, self.X, self.Y, self.quorum_conf)
+                    self.N[self.node_name] = m
+                    p = util.Packet(self.node_name, self.ip, 'nomination', m)
+                    print('++++++++++++++++++++++++++++++++++++++++++++++++++')
+                    print(self.node_name, ' nominate value : ', nominate_value)
+                    print('++++++++++++++++++++++++++++++++++++++++++++++++++')
+                    util.broadcast(self.quorum_conf, p)
+                else:
+                    return
         else:
             echoing = True if msg.node in r_leader_set else False
             self.N[msg.node] = msg
-            # print(self.node_name, ' : N : ', self.N)
+            print('round', self.round, ' : ', self.node_name, 'selects round leader : ', self.roundLeader_set)
             self.verify_messages(echoing)
             print(self.node_name, '\'s X, Y, Z : ', self.X, self.Y, self.Z)
 
@@ -90,16 +103,17 @@ class nomination():
         if self.check_voting_count(votes, accepts, candidates, echoing):
             m = message.NominationMessage(self.node_name, self.slot_ix, self.X, self.Y, self.quorum_conf)
             p = util.Packet(self.node_name, self.ip, 'nomination', m)
+            # time.sleep(random.randrange(1, 3))
             util.broadcast(self.quorum_conf, p)
 
     def check_voting_count(self, votes, accepts, candidates, echoing):
-        if echoing:                     # flag which indicates state is changed
+        if echoing:                                     # flag which indicates state is changed, if echoing set default state_flag True to broadcast
             state_flag = True
         else:
             state_flag = False              
-        m_votes = copy.deepcopy(votes)                 # dictionary of {voted_value:count, }
-        m_accepts = copy.deepcopy(accepts)             # dictionary of (accepted_value:count, }
-        m_candidates = copy.deepcopy(candidates)       # list of [candidates, ]
+        m_votes = copy.deepcopy(votes)                  # dictionary of {voted_value:count, }
+        m_accepts = copy.deepcopy(accepts)              # dictionary of (accepted_value:count, }
+        m_candidates = copy.deepcopy(candidates)        # list of [candidates, ]
         for value, vote_count in votes.items():
             if int(vote_count/len(self.quorum_conf['validators'])*100) >= self.quorum_conf['threshold']:
                 del m_votes[value]
@@ -116,11 +130,11 @@ class nomination():
                     m_candidates.append(value)
         for value in m_votes.keys():
             if value not in self.X:
-                self.X.append(value)
+                self.X.add(value)
         for value in m_accepts.keys():
             if value not in self.Y:
-                self.Y.append(value)
+                self.Y.add(value)
         for value in m_candidates:
             if value not in self.Z:
-                self.Z.append(value)
+                self.Z.add(value)
         return state_flag
