@@ -1,4 +1,4 @@
-# fba_consensus
+# FBA(federated byzantine agreement) consensus prototype
 
 This is the federated byzantine agreement consensus prototype application by reference to SCP(stellar consensus protocol).
 In this application, Quorum have only five nodes point each other.
