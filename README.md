@@ -3,7 +3,7 @@
 This is the federated byzantine agreement consensus prototype application by reference to SCP(stellar consensus protocol).
 In this application, Quorum have only five nodes which point each other.
 Federated voting nomination, ballot prepare, ballo commit 
-FBA runs the federated voting process(nomination, ballot) on every slot.
+FBA runs the federated voting process<nomination, ballot> on every slot.
 
 # Usage
 
